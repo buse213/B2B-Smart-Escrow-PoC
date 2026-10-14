@@ -1,0 +1,21 @@
+# Node modules (Hem ana dizin hem frontend için)
+node_modules/
+
+# Compilation output
+dist/
+build/
+
+# Hardhat Build Artifacts
+artifacts/
+cache/
+typechain-types/
+types/
+
+# Environment files
+.env
+.env.*
+
+# Hardhat coverage & gas reports
+coverage/
+.gas-snapshot
+snapshots/

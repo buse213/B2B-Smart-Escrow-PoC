@@ -26,7 +26,6 @@ export default function App() {
   const [contractAddress, setContractAddress] = useState(""); 
   const [activeTab, setActiveTab] = useState('buyer');
   
-  // Orijinal State'lerin
   const [state, setState] = useState({ amount: "0", isDelivered: false, isDisputed: false, isCompleted: false, disputeProof: "" });
   const [depositAmount, setDepositAmount] = useState("100"); 
   const [evidenceFile, setEvidenceFile] = useState(null);
@@ -34,11 +33,13 @@ export default function App() {
   const [ipfsHash, setIpfsHash] = useState("");
   const [uploading, setUploading] = useState(false);
 
-  // YENİ: UI/UX State'leri (Cüzdanlar ve Terminal)
   const [balances, setBalances] = useState({ buyer: "0", seller: "0", arbiter: "0" });
   const [txHistory, setTxHistory] = useState([]); 
+  const [simulatedDays, setSimulatedDays] = useState(0); 
+  
+  // YENİ: Teslimatın yapıldığı tam zamanı aklında tutacak state
+  const [deliverySimulatedDay, setDeliverySimulatedDay] = useState(null);
 
-  // Terminale Log Ekleme Fonksiyonu
   const addLog = (type, msg, hash = "") => {
     const time = new Date().toLocaleTimeString();
     setTxHistory(prev => [{ time, type, msg, hash }, ...prev]);
@@ -65,7 +66,6 @@ export default function App() {
         disputeProof: await contracts.buyer.disputeProof()
       });
       
-      // YENİ: Canlı Cüzdan Bakiyelerini Çekiyoruz
       const bBal = await provider.getBalance(new ethers.Wallet(BUYER_KEY).address);
       const sBal = await provider.getBalance(new ethers.Wallet(SELLER_KEY).address);
       const aBal = await provider.getBalance(new ethers.Wallet(ARBITER_KEY).address);
@@ -83,6 +83,8 @@ export default function App() {
   const resetSystem = async () => {
     addLog("SİSTEM", "Sıfırlama başlatıldı, yeni kontrat derleniyor...");
     setEvidenceFile(null); setEvidencePreview(""); setIpfsHash(""); setTxHistory([]);
+    setSimulatedDays(0); 
+    setDeliverySimulatedDay(null); // Sıfırlamada teslimat zamanını da temizle
     try {
       const res = await fetch("http://localhost:3000/api/reset", { method: "POST" });
       const data = await res.json();
@@ -113,7 +115,6 @@ export default function App() {
     }, 2500); 
   };
 
-  // --- ALICI FONKSİYONLARI ---
   const deposit = async () => {
     if (!depositAmount || Number(depositAmount) <= 0) {
       addLog("HATA", "Geçersiz ETH tutarı."); return;
@@ -154,7 +155,6 @@ export default function App() {
     } catch (e) { addLog("HATA", "Henüz 14 gün geçmedi veya kargo yolda."); }
   };
 
-  // --- SATICI & HAKEM & ORACLE ---
   const autoRelease = async () => {
     addLog("SATICI", "Otomatik çekim deneniyor...");
     try {
@@ -173,6 +173,7 @@ export default function App() {
 
   const triggerDelivery = async () => {
     await fetch("http://localhost:3000/api/deliver", { method: "POST" });
+    setDeliverySimulatedDay(simulatedDays); // DÜZELTME: Teslimatın yapıldığı o anki günü kaydet
     addLog("ORACLE", "Kargo teslim edildi sinyali gönderildi."); fetchState();
   };
 
@@ -180,10 +181,10 @@ export default function App() {
     await fetch("http://localhost:3000/api/fast-forward", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days })
     });
+    setSimulatedDays(prev => prev + days); 
     addLog("ORACLE", `Blokzincir zamanı ${days} gün ileri sarıldı.`); fetchState();
   };
 
-  // Dinamik İlerleme Durumu Hesaplama
   const getStep = () => {
     if (state.isCompleted) return 4;
     if (state.isDisputed) return 3;
@@ -192,6 +193,9 @@ export default function App() {
     return 1;
   };
   const step = getStep();
+
+  // DÜZELTME MANTIĞI: 5 gün kilitlenme süresi, Teslim Edildiği GÜNDEN İTİBAREN başlar
+  const isFiveDaysPassed = state.isDelivered && deliverySimulatedDay !== null && (simulatedDays - deliverySimulatedDay >= 5);
 
   return (
     <div className="dashboard-container">
@@ -203,7 +207,6 @@ export default function App() {
         <button onClick={resetSystem} className="btn-reset">🔄 Sistemi Sıfırla (Yeni Test)</button>
       </div>
 
-      {/* İLERLEME ÇUBUĞU (STEPPER) */}
       <div className="stepper-card">
         <div className={`step ${step >= 1 ? 'active' : ''}`}>1. Sipariş & Ödeme</div>
         <div className={`step-line ${step >= 2 ? 'active' : ''}`}></div>
@@ -217,13 +220,13 @@ export default function App() {
       </div>
 
       <div className="main-grid">
-        {/* SOL PANEL: KONTROLLER */}
         <div className="controls-section">
           
           <div className="status-banner">
-            <div className="stat-box"><span>Kilitli Fon</span> <strong>{state.amount} ETH</strong></div>
-            <div className="stat-box"><span>Teslimat Durumu</span> <strong>{state.isDelivered ? "✅ Teslim Edildi" : "⏳ Bekliyor"}</strong></div>
-            <div className="stat-box"><span>Nihai Durum</span> <strong>{state.isCompleted ? "✅ Kapandı" : "Sürüyor"}</strong></div>
+            <div className="stat-box"><span>KİLİTLİ FON</span> <strong>{state.amount} ETH</strong></div>
+            <div className="stat-box"><span>TESLİMAT DURUMU</span> <strong>{state.isDelivered ? "✅ Teslim Edildi" : "⏳ Bekliyor"}</strong></div>
+            <div className="stat-box"><span>NİHAİ DURUM</span> <strong>{state.isCompleted ? "✅ Kapandı" : "Sürüyor"}</strong></div>
+            <div className="stat-box time-box"><span>SANAL ZAMAN</span> <strong>+{simulatedDays} Gün</strong></div>
           </div>
 
           <div className="tabs">
@@ -241,16 +244,22 @@ export default function App() {
                   <input type="number" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} disabled={!contractAddress || state.amount > 0 || state.isCompleted} className="eth-input" min="0.1" step="0.1" />
                   <span className="eth-label">ETH</span>
                   <button onClick={deposit} disabled={!contractAddress || state.amount > 0 || state.isCompleted} className="btn btn-primary">Ödemeyi Kilitle</button>
-                  <button onClick={approve} disabled={!contractAddress || !state.isDelivered || state.isDisputed || state.isCompleted} className="btn btn-success">Ürünü Onayla</button>
-                  {/* DÜZELTİLDİ: 14 Gün İptali butonu */}
+                  {/* Artık isFiveDaysPassed değişkenini kullanıyoruz */}
+                  <button onClick={approve} disabled={!contractAddress || !state.isDelivered || state.isDisputed || state.isCompleted || isFiveDaysPassed} className="btn btn-success">Ürünü Onayla</button>
                   <button onClick={refund} disabled={!contractAddress || state.isDelivered || Number(state.amount) === 0 || state.isCompleted} className="btn btn-outline">⏱️ 14 Gün İptali</button>
                 </div>
+                
+                {isFiveDaysPassed && !state.isCompleted && state.isDelivered && (
+                  <p style={{ color: "#dc2626", fontSize: "13px", fontWeight: "bold", marginTop: "15px", padding: "10px", background: "#fef2f2", borderRadius: "8px", border: "1px solid #fecaca" }}>
+                    ⏳ 5 günlük yasal onay ve itiraz süreniz dolmuştur. Bu aşamada işlem satıcı kontrolüne geçmiştir.
+                  </p>
+                )}
 
                 {state.isDelivered && !state.isCompleted && (
                   <div className="dispute-box">
                     <h4>🚨 Hasarlı Ürün İtirazı</h4>
                     <div className="file-upload">
-                      <input type="file" accept="image/*" onChange={handleFileChange} disabled={state.isDisputed} />
+                      <input type="file" accept="image/*" onChange={handleFileChange} disabled={state.isDisputed || isFiveDaysPassed} />
                       {uploading && <span className="spinner">⏳ IPFS'e Yükleniyor...</span>}
                     </div>
                     {evidencePreview && (
@@ -259,7 +268,7 @@ export default function App() {
                         <div className="evidence-details">
                           <p className="success-text">✓ Kanıt IPFS ağına şifrelendi!</p>
                           <code>{ipfsHash || "Bekleniyor..."}</code>
-                          <button onClick={dispute} disabled={!ipfsHash || state.isDisputed} className="btn btn-danger mt-10">
+                          <button onClick={dispute} disabled={!ipfsHash || state.isDisputed || isFiveDaysPassed} className="btn btn-danger mt-10">
                             ⚠️ Kanıtla İtiraz Et (Dispute)
                           </button>
                         </div>
@@ -301,7 +310,6 @@ export default function App() {
               <div className="panel oracle-panel">
                 <h3>Web2.5 Oracle & Zaman Makinesi</h3>
                 <div className="action-row">
-                  {/* DÜZELTİLDİ: Teslim Edildi Sinyali butonu */}
                   <button onClick={triggerDelivery} disabled={!contractAddress || Number(state.amount) === 0 || state.isDelivered} className="btn btn-dark">📦 "Teslim Edildi" Sinyali</button>
                   <button onClick={() => fastForward(5)} disabled={!contractAddress} className="btn btn-dark">⏩ 5 Gün İleri</button>
                   <button onClick={() => fastForward(14)} disabled={!contractAddress} className="btn btn-dark">⏩ 14 Gün İleri</button>
@@ -311,7 +319,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* SAĞ PANEL: CÜZDANLAR VE TERMİNAL */}
         <div className="sidebar">
           <div className="wallets-card">
             <h3>💳 Cüzdan Bakiyeleri (ETH)</h3>
@@ -362,10 +369,11 @@ export default function App() {
 
         .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 25px; }
         
-        .status-banner { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .status-banner { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
         .stat-box { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
-        .stat-box span { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 5px; }
+        .stat-box span { font-size: 12px; color: #6b7280; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 5px; }
         .stat-box strong { font-size: 18px; color: #111827; }
+        .time-box strong { color: #d97706; }
 
         .tabs { display: flex; gap: 10px; margin-bottom: 15px; }
         .tab { flex: 1; padding: 12px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; font-weight: 600; color: #4b5563; cursor: pointer; transition: 0.2s; }

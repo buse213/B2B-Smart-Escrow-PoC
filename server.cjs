@@ -11,11 +11,16 @@ const provider = new JsonRpcProvider("http://127.0.0.1:8545");
 const ARBITER_PRIVATE_KEY = "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
 const arbiterWallet = new Wallet(ARBITER_PRIVATE_KEY, provider);
 
+// Oracle ayrı bir cüzdan (Hardhat test hesabı #3): teslimat bilgisini yalnızca o iletir
+const ORACLE_PRIVATE_KEY = "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6";
+const oracleWallet = new Wallet(ORACLE_PRIVATE_KEY, provider);
+
 // Artık const değil let kullanıyoruz ki her reset attığımızda adresi güncelleyebilelim
 let CONTRACT_ADDRESS = "";
 let escrowContract = null;
 
 app.post("/api/deliver", async (req, res) => {
+    if (!escrowContract) return res.status(400).json({ success: false, error: "Önce sistemi sıfırlayıp kontrat yükleyin" });
     try {
         const tx = await escrowContract.markAsDelivered();
         await tx.wait();
@@ -43,11 +48,11 @@ app.post("/api/reset", async (req, res) => {
         const sellerAddress = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
         
         // Ağa yepyeni bir kontrat fırlatıyoruz
-        const newEscrow = await factory.deploy(buyerAddress, sellerAddress, arbiterWallet.address);
+        const newEscrow = await factory.deploy(buyerAddress, sellerAddress, arbiterWallet.address, oracleWallet.address);
         await newEscrow.waitForDeployment();
         
         CONTRACT_ADDRESS = await newEscrow.getAddress();
-        escrowContract = new Contract(CONTRACT_ADDRESS, EscrowArtifact.abi, arbiterWallet);
+        escrowContract = new Contract(CONTRACT_ADDRESS, EscrowArtifact.abi, oracleWallet); // Oracle imzalı işlem gönderir
         
         console.log("✅ Yeni kontrat yüklendi:", CONTRACT_ADDRESS);
         res.json({ success: true, newAddress: CONTRACT_ADDRESS });
@@ -58,4 +63,4 @@ app.post("/api/reset", async (req, res) => {
 });
 
 const PORT = 3000;
-app.listen(PORT, () => console.log(`✅ Oracle API Sunucusu http://localhost:${PORT} adresinde calisiyor`));
+app.listen(PORT, () => console.log(`✅ Oracle API Sunucusu http://localhost:${PORT} adresinde calisiyor`));

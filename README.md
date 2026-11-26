@@ -1,57 +1,38 @@
-# Sample Hardhat 3 Project (`mocha` and `ethers`)
+# B2B Web3 Escrow – Kavram Kanıtı (PoC)
 
-This project showcases a Hardhat 3 project using `mocha` for tests and the `ethers` library for Ethereum interactions.
+Web2.5 Oracle ve IPFS tabanlı merkeziyetsiz emanet (escrow) prototipi.
 
-To learn more about Hardhat 3, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3](https://hardhat.org/hardhat3-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+## Katmanlar
+- **Akıllı Sözleşme** (`contracts/Escrow.sol`): Fon kilitleme, 14 gün teslimatsızlık iadesi, teslimat sonrası 5 gün zımni onay, hakem kararı.
+- **Web2.5 Oracle** (`server.cjs`): Node.js/Express; "Teslim Edildi" bilgisini ayrı Oracle cüzdanıyla imzalı işlem olarak iletir.
+- **Kanıt (IPFS)**: İtiraz kanıtının CID'si zincire yazılır (prototipte yükleme simüledir).
+- **dApp** (`frontend/`): React + Ethers.js.
 
-## Project Overview
+## Roller (Hardhat test hesapları)
+| Rol | Hesap |
+| --- | --- |
+| Alıcı | #0 |
+| Satıcı | #1 |
+| Hakem | #2 |
+| Oracle | #3 |
 
-This example project includes:
-
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using `mocha` and ethers.js
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
-
-## Usage
-
-### Running Tests
-
-To run all the tests in the project, execute the following command:
-
-```shell
-npx hardhat test
+## Çalıştırma
+```bash
+npm install
+npx hardhat compile
+npx hardhat test          # 5 temel senaryo testi
+npx hardhat node          # ayrı terminalde
+node server.cjs           # ayrı terminalde (Oracle API, port 3000)
+cd frontend && npm install && npm run dev
 ```
+Arayüzde önce **Sistemi Sıfırla** ile yeni kontrat yüklenir.
 
-You can also selectively run the Solidity or `mocha` tests:
+## Test Senaryoları (`test/Escrow.ts`)
+1. Fon kilitleme
+2. Oracle aracılı teslimat onayı
+3. Alıcı onayı ile fon aktarımı
+4. Anlaşmazlık ve hakem müdahalesi
+5. 5 ve 14 günlük zaman aşımı kuralları
 
-```shell
-npx hardhat test solidity
-npx hardhat test mocha
-```
-
-### Make a deployment to Sepolia
-
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
-
-To run the deployment to a local chain:
-
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
-```
-
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
-
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
-
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
-
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
-```
-
-After setting the variable, you can run the deployment with the Sepolia network:
-
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
-```
+## Sınırlılıklar
+Yerel test ağı, tek sunuculu Oracle, simüle IPFS, kodda açık test anahtarları (yalnızca Hardhat için).

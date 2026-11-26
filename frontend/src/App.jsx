@@ -106,7 +106,7 @@ export default function App() {
 
   const simulateIpfsUpload = (fileName) => {
     setUploading(true);
-    addLog("SİSTEM", "Kanıt IPFS'e şifreleniyor...");
+   addLog("SİSTEM", "Kanıt IPFS'e yükleniyor (CID üretiliyor)...");
     setTimeout(() => {
       const mockHash = "ipfs://Qm" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       setIpfsHash(mockHash);
@@ -130,8 +130,10 @@ export default function App() {
 
   const approve = async () => {
     addLog("ALICI", "Teslimat onaylanıyor...");
-    const tx = await getContracts().buyer.approveDelivery();
-    await tx.wait(); addLog("BAŞARILI", "Onaylandı, fonlar satıcıya geçti.", tx.hash); fetchState();
+    try {
+      const tx = await getContracts().buyer.approveDelivery();
+      await tx.wait(); addLog("BAŞARILI", "Onaylandı, fonlar satıcıya geçti.", tx.hash); fetchState();
+    } catch (e) { addLog("HATA", "Onay başarısız: " + (e.shortMessage || e.message)); }
   };
 
   const dispute = async () => {
@@ -165,16 +167,22 @@ export default function App() {
 
   const resolve = async (refundBuyer) => {
     addLog("HAKEM", "Karar işleniyor...");
-    const tx = await getContracts().arbiter.resolveDispute(refundBuyer);
-    await tx.wait(); 
-    addLog("BAŞARILI", refundBuyer ? "Alıcı haklı bulundu, iade yapıldı." : "Satıcı haklı bulundu, ödeme aktarıldı.", tx.hash); 
-    fetchState();
+    try {
+      const tx = await getContracts().arbiter.resolveDispute(refundBuyer);
+      await tx.wait(); 
+      addLog("BAŞARILI", refundBuyer ? "Alıcı haklı bulundu, iade yapıldı." : "Satıcı haklı bulundu, ödeme aktarıldı.", tx.hash); 
+      fetchState();
+    } catch (e) { addLog("HATA", "Hakem kararı işlenemedi: " + (e.shortMessage || e.message)); }
   };
 
   const triggerDelivery = async () => {
-    await fetch("http://localhost:3000/api/deliver", { method: "POST" });
-    setDeliverySimulatedDay(simulatedDays); // DÜZELTME: Teslimatın yapıldığı o anki günü kaydet
-    addLog("ORACLE", "Kargo teslim edildi sinyali gönderildi."); fetchState();
+    try {
+      const res = await fetch("http://localhost:3000/api/deliver", { method: "POST" });
+      const data = await res.json();
+      if (!data.success) { addLog("HATA", "Oracle teslimatı iletemedi: " + data.error); return; }
+      setDeliverySimulatedDay(simulatedDays); // Teslimatın yapıldığı o anki günü kaydet
+      addLog("ORACLE", "Kargo teslim edildi sinyali imzalı işlemle gönderildi.", data.txHash); fetchState();
+    } catch (e) { addLog("HATA", "Oracle API'ye ulaşılamadı."); }
   };
 
   const fastForward = async (days) => {
@@ -251,7 +259,7 @@ export default function App() {
                 
                 {isFiveDaysPassed && !state.isCompleted && state.isDelivered && (
                   <p style={{ color: "#dc2626", fontSize: "13px", fontWeight: "bold", marginTop: "15px", padding: "10px", background: "#fef2f2", borderRadius: "8px", border: "1px solid #fecaca" }}>
-                    ⏳ 5 günlük yasal onay ve itiraz süreniz dolmuştur. Bu aşamada işlem satıcı kontrolüne geçmiştir.
+                    ⏳ 5 günlük sözleşmesel onay ve itiraz süreniz dolmuştur. Bu aşamada işlem satıcı kontrolüne geçmiştir.
                   </p>
                 )}
 
@@ -266,7 +274,7 @@ export default function App() {
                       <div className="evidence-preview">
                         <img src={evidencePreview} alt="Kanıt" />
                         <div className="evidence-details">
-                          <p className="success-text">✓ Kanıt IPFS ağına şifrelendi!</p>
+                       <p className="success-text">✓ Kanıt IPFS ağına yüklendi (CID üretildi)!</p>
                           <code>{ipfsHash || "Bekleniyor..."}</code>
                           <button onClick={dispute} disabled={!ipfsHash || state.isDisputed || isFiveDaysPassed} className="btn btn-danger mt-10">
                             ⚠️ Kanıtla İtiraz Et (Dispute)
@@ -294,7 +302,7 @@ export default function App() {
                 <h3>Hakem (Yönetici) Paneli</h3>
                 {state.isDisputed && (
                   <div className="arbiter-evidence">
-                    <h4>🔍 Alıcının Kanıt Fotoğrafı:</h4>
+                    <h4>🔍 Alıcının Kanıt Fotoğrafı (CID zincirden okunur, görsel önizlemesi simüledir):</h4>
                     <p><strong>IPFS:</strong> {state.disputeProof}</p>
                     {evidencePreview && <img src={evidencePreview} alt="Alıcı Kanıtı" />}
                   </div>
